@@ -1,6 +1,7 @@
 package net.resports
 
 import io.ktor.application.*
+import io.ktor.features.*
 import io.ktor.http.*
 import io.ktor.response.*
 import io.ktor.routing.*
@@ -34,7 +35,11 @@ object PeriodSerializer : KSerializer<Period> {
 data class Period(val from: ZonedDateTime, val to: ZonedDateTime)
 
 @Serializable
-data class Tournament(val title: String, val holdingPeriod: Period, val applicationPeriod: Period)
+data class Tournament(
+    val title: String,
+    @SerialName("holding_period") val holdingPeriod: Period,
+    @SerialName("application_period") val applicationPeriod: Period
+)
 
 fun main() {
     val tournament = Tournament(
@@ -49,6 +54,9 @@ fun main() {
         )
     )
     embeddedServer(Netty, port = 1234) {
+        install(CORS) {
+            host("localhost:3000")
+        }
         routing {
             get("/v1/tournament/{id}") {
                 call.respondText(Json.encodeToString(tournament), ContentType.Application.Json)
