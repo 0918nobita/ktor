@@ -1,6 +1,7 @@
 package net.resports
 
 import io.ktor.application.*
+import io.ktor.http.*
 import io.ktor.response.*
 import io.ktor.routing.*
 import io.ktor.server.engine.*
@@ -50,7 +51,7 @@ fun main() {
     embeddedServer(Netty, port = 1234) {
         routing {
             get("/v1/tournament/{id}") {
-                call.respond(Json.encodeToString(tournament))
+                call.respondText(Json.encodeToString(tournament), ContentType.Application.Json)
             }
         }
     }.start(wait = true)
