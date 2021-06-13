@@ -8,7 +8,7 @@ group = "net.resports"
 version = "1.0-SNAPSHOT"
 
 application {
-    mainClass.set("net.resports.MainKt")
+    mainClass.set("net.resports.eVent.MainKt")
 }
 
 repositories {
