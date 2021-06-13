@@ -24,4 +24,6 @@ dependencies {
     implementation("io.ktor:ktor-server-core:$ktorVersion")
     implementation("io.ktor:ktor-server-netty:$ktorVersion")
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
+    implementation("mysql:mysql-connector-java:8.0.25")
+    implementation("org.jetbrains.exposed:exposed:0.17.13")
 }

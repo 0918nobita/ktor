@@ -1,17 +1,24 @@
 package net.resports.eVent.controller
 
-import io.ktor.application.*
-import io.ktor.http.*
-import io.ktor.response.*
-import io.ktor.routing.*
+import io.ktor.application.call
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.response.respond
+import io.ktor.response.respondText
+import io.ktor.routing.Route
+import io.ktor.routing.route
+import io.ktor.routing.get
 import kotlinx.serialization.KSerializer
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
-import java.time.ZonedDateTime
+import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.transactions.transaction
+import org.joda.time.DateTime
 
 @Serializable
 @SerialName("Period")
@@ -27,12 +34,12 @@ object PeriodSerializer : KSerializer<Period> {
 
     override fun deserialize(decoder: Decoder): Period {
         val surrogate = decoder.decodeSerializableValue(PeriodSurrogate.serializer())
-        return Period(from = ZonedDateTime.parse(surrogate.from), to = ZonedDateTime.parse(surrogate.to))
+        return Period(from = DateTime.parse(surrogate.from), to = DateTime.parse(surrogate.to))
     }
 }
 
 @Serializable(with = PeriodSerializer::class)
-data class Period(val from: ZonedDateTime, val to: ZonedDateTime)
+data class Period(val from: DateTime, val to: DateTime)
 
 @Serializable
 data class Tournament(
@@ -41,21 +48,47 @@ data class Tournament(
     @SerialName("application_period") val applicationPeriod: Period
 )
 
+object TournamentTable : Table("tournament") {
+    val id = integer("id")
+    val title = text("title")
+    val holdingPeriodFrom = datetime("holding_period_from")
+    val holdingPeriodTo = datetime("holding_period_to")
+    val applicationPeriodFrom = datetime("application_period_from")
+    val applicationPeriodTo = datetime("application_period_to")
+}
+
 fun Route.tournamentController() {
-    val tournament = Tournament(
-        title = "APEX CRカップ",
-        holdingPeriod = Period(
-            ZonedDateTime.parse("2021-06-12T19:00:00+09:00"),
-            ZonedDateTime.parse("2021-06-12T22:00:00+09:00")
-        ),
-        applicationPeriod = Period(
-            ZonedDateTime.parse("2021-06-01T15:00:00+09:00"),
-            ZonedDateTime.parse("2021-06-10T23:59:00+09:00")
-        )
-    )
     route("/v1/tournament/{id}") {
         get {
-            call.respondText(Json.encodeToString(tournament), ContentType.Application.Json)
+            val tournamentId = call.parameters["id"]?.toIntOrNull()
+            if (tournamentId == null) {
+                call.respond(HttpStatusCode.BadRequest, "Invalid tournament id")
+                return@get
+            }
+            var tournament: Tournament? = null
+            transaction {
+                val resultRow = TournamentTable.select { TournamentTable.id eq tournamentId }.limit(1).firstOrNull()
+                if (resultRow == null) {
+                    call.response.status(HttpStatusCode.NotFound)
+                    return@transaction
+                }
+                tournament = Tournament(
+                    title = resultRow[TournamentTable.title],
+                    holdingPeriod = Period(
+                        resultRow[TournamentTable.holdingPeriodFrom],
+                        resultRow[TournamentTable.holdingPeriodTo]
+                    ),
+                    applicationPeriod = Period(
+                        resultRow[TournamentTable.applicationPeriodFrom],
+                        resultRow[TournamentTable.applicationPeriodTo]
+                    )
+                )
+            }
+            if (tournament != null) {
+                call.respondText(Json.encodeToString(tournament), ContentType.Application.Json)
+                return@get
+            }
+            call.respond(HttpStatusCode.NotFound, "Tournament not found")
         }
     }
 }
