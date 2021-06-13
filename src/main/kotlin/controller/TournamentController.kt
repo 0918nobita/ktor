@@ -15,8 +15,10 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.dao.EntityID
+import org.jetbrains.exposed.dao.IntEntity
+import org.jetbrains.exposed.dao.IntEntityClass
+import org.jetbrains.exposed.dao.IntIdTable
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 
@@ -48,14 +50,29 @@ data class Tournament(
     @SerialName("application_period") val applicationPeriod: Period
 )
 
-object TournamentTable : Table("tournament") {
-    val id = integer("id")
+object TournamentTable : IntIdTable("tournament") {
     val title = text("title")
     val holdingPeriodFrom = datetime("holding_period_from")
     val holdingPeriodTo = datetime("holding_period_to")
     val applicationPeriodFrom = datetime("application_period_from")
     val applicationPeriodTo = datetime("application_period_to")
 }
+
+class TournamentModel(id: EntityID<Int>) : IntEntity(id) {
+    companion object : IntEntityClass<TournamentModel>(TournamentTable)
+
+    var title by TournamentTable.title
+    var holdingPeriodFrom by TournamentTable.holdingPeriodFrom
+    var holdingPeriodTo by TournamentTable.holdingPeriodTo
+    var applicationPeriodFrom by TournamentTable.applicationPeriodFrom
+    var applicationPeriodTo by TournamentTable.applicationPeriodTo
+}
+
+fun TournamentModel.toEntity() = Tournament(
+    title = title,
+    holdingPeriod = Period(holdingPeriodFrom, holdingPeriodTo),
+    applicationPeriod = Period(applicationPeriodFrom, applicationPeriodTo)
+)
 
 fun Route.tournamentController() {
     route("/v1/tournament/{id}") {
@@ -67,22 +84,10 @@ fun Route.tournamentController() {
             }
             var tournament: Tournament? = null
             transaction {
-                val resultRow = TournamentTable.select { TournamentTable.id eq tournamentId }.limit(1).firstOrNull()
-                if (resultRow == null) {
-                    call.response.status(HttpStatusCode.NotFound)
-                    return@transaction
+                val tournamentModel = TournamentModel.findById(tournamentId)
+                if (tournamentModel != null) {
+                    tournament = tournamentModel.toEntity()
                 }
-                tournament = Tournament(
-                    title = resultRow[TournamentTable.title],
-                    holdingPeriod = Period(
-                        resultRow[TournamentTable.holdingPeriodFrom],
-                        resultRow[TournamentTable.holdingPeriodTo]
-                    ),
-                    applicationPeriod = Period(
-                        resultRow[TournamentTable.applicationPeriodFrom],
-                        resultRow[TournamentTable.applicationPeriodTo]
-                    )
-                )
             }
             if (tournament != null) {
                 call.respondText(Json.encodeToString(tournament), ContentType.Application.Json)
